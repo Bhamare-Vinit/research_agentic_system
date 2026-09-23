@@ -1,10 +1,15 @@
-from pathlib import Path
+from agent.settings import (
+    BACKEND_DIR,
+    DATA_DIR,
+    DJANGO_DEBUG,
+    DJANGO_SECRET_KEY,
+    FRONTEND_ORIGINS,
+)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+BASE_DIR = BACKEND_DIR
 
-SECRET_KEY = "dossier-local-dev-only"
-DEBUG = True
+SECRET_KEY = DJANGO_SECRET_KEY
+DEBUG = DJANGO_DEBUG
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
@@ -22,9 +27,6 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {}
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+CORS_ALLOWED_ORIGINS = FRONTEND_ORIGINS
 
 USE_TZ = True
