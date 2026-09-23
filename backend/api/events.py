@@ -1,8 +1,9 @@
 import json
 
+from langchain_core.callbacks import get_usage_metadata_callback
 from langchain_core.messages import HumanMessage
 
-from agent import settings
+from agent import settings, tokens
 from agent.checkpoint import get_checkpointer
 from agent.graph import NODE_LABELS, build_graph, initial_state
 
@@ -54,6 +55,46 @@ def describe_research_entry(entry):
     return event
 
 
+def node_events(node, payload, answer):
+    events = [{"type": "status", "node": node, "message": NODE_LABELS.get(node, node)}]
+    if not isinstance(payload, dict):
+        return events
+
+    if node == "understand_query":
+        events.append(
+            {
+                "type": "understanding",
+                "topic": payload.get("topic"),
+                "information": payload.get("information"),
+                "intent": payload.get("intent"),
+            }
+        )
+
+    if node == "retrieve_dossier":
+        answer["retrieval_stats"] = payload.get("retrieval_stats", {})
+        events.append({"type": "retrieval", "stats": answer["retrieval_stats"]})
+
+    if node == "decide":
+        events.append(
+            {
+                "type": "decision",
+                "decision": payload.get("decision"),
+                "reason": payload.get("decision_reason"),
+            }
+        )
+
+    if node == "research":
+        answer["iterations"] = payload.get("iteration", answer["iterations"])
+        events.extend(describe_research_entry(entry) for entry in payload.get("research_log", []))
+
+    if node == "compose_answer":
+        answer["blocks"] = payload.get("blocks", [])
+        answer["final_answer"] = payload.get("final_answer", "")
+        answer["dropped_finding_ids"] = payload.get("dropped_finding_ids", [])
+
+    return events
+
+
 def run_stream(query, thread_id):
     state = initial_state(query)
     state["messages"] = [HumanMessage(query)]
@@ -75,55 +116,31 @@ def run_stream(query, thread_id):
         "dropped_finding_ids": [],
         "retrieval_stats": {},
         "iterations": 0,
+        "llm": {},
     }
 
     yield sse({"type": "status", "node": "start", "message": "Opening the dossier"})
 
     try:
-        for update in get_graph().stream(state, config=config, stream_mode="updates"):
-            for node, payload in update.items():
-                yield sse(
-                    {"type": "status", "node": node, "message": NODE_LABELS.get(node, node)}
-                )
-                if not isinstance(payload, dict):
-                    continue
-
-                if node == "understand_query":
-                    yield sse(
-                        {
-                            "type": "understanding",
-                            "topic": payload.get("topic"),
-                            "information": payload.get("information"),
-                            "intent": payload.get("intent"),
-                        }
-                    )
-
-                if node == "retrieve_dossier":
-                    answer["retrieval_stats"] = payload.get("retrieval_stats", {})
-                    yield sse(
-                        {"type": "retrieval", "stats": answer["retrieval_stats"]}
-                    )
-
-                if node == "decide":
-                    yield sse(
-                        {
-                            "type": "decision",
-                            "decision": payload.get("decision"),
-                            "reason": payload.get("decision_reason"),
-                        }
-                    )
-
-                if node == "research":
-                    answer["iterations"] = payload.get("iteration", answer["iterations"])
-                    for entry in payload.get("research_log", []):
-                        yield sse(describe_research_entry(entry))
-
-                if node == "compose_answer":
-                    answer["blocks"] = payload.get("blocks", [])
-                    answer["final_answer"] = payload.get("final_answer", "")
-                    answer["dropped_finding_ids"] = payload.get("dropped_finding_ids", [])
+        with get_usage_metadata_callback() as usage:
+            for update in get_graph().stream(state, config=config, stream_mode="updates"):
+                for node, payload in update.items():
+                    for event in node_events(node, payload, answer):
+                        yield sse(event)
     except Exception as failure:
         yield sse({"type": "error", "message": str(failure)})
         return
+
+    answer["llm"] = tokens.summarise_usage(usage.usage_metadata)
+
+    tokens.record_turn(
+        {
+            "thread_id": thread_id,
+            "query": query,
+            "iterations": answer["iterations"],
+            "retrieval": answer["retrieval_stats"],
+            "llm": answer["llm"],
+        }
+    )
 
     yield sse({"type": "done", "thread_id": thread_id, **answer})

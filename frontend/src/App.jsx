@@ -5,6 +5,29 @@ import BlockRenderer from "./blocks/BlockRenderer.jsx";
 
 const THREAD_STORAGE_KEY = "dossier.thread";
 
+function TurnMeta({ answer }) {
+  const retrieval = answer.retrieval_stats || {};
+  const llm = answer.llm || {};
+  const parts = [];
+
+  if (retrieval.whole_dossier_tokens) {
+    parts.push(
+      `retrieved ${retrieval.retrieved_tokens} of ${retrieval.whole_dossier_tokens} dossier tokens (${retrieval.tokens_saved_pct}% saved)`
+    );
+  }
+  if (llm.total_tokens) {
+    parts.push(`${llm.prompt_tokens} in / ${llm.completion_tokens} out model tokens`);
+  }
+  parts.push(
+    answer.iterations === 1 ? "1 research pass" : `${answer.iterations} research passes`
+  );
+  if (answer.dropped_finding_ids?.length) {
+    parts.push(`${answer.dropped_finding_ids.length} invented id dropped`);
+  }
+
+  return <div className="turn-meta">{parts.join("  ·  ")}</div>;
+}
+
 function rememberedThread() {
   try {
     return window.localStorage.getItem(THREAD_STORAGE_KEY);
@@ -123,7 +146,10 @@ export default function App() {
           </div>
           <div className="answer">
             {turn.answer ? (
-              <BlockRenderer blocks={turn.answer.blocks} />
+              <>
+                <BlockRenderer blocks={turn.answer.blocks} />
+                <TurnMeta answer={turn.answer} />
+              </>
             ) : (
               <span className="status">{status || "working"}</span>
             )}

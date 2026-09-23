@@ -254,3 +254,11 @@ body {
   border-color: var(--ink);
   color: var(--ink);
 }
+
+.turn-meta {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}

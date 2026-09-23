@@ -3,7 +3,7 @@ import uuid
 
 from django.http import JsonResponse, StreamingHttpResponse
 
-from agent import settings
+from agent import settings, tokens
 from agent.tools import dossier_tools, storage
 from api.events import replay_thread, run_stream
 
@@ -47,6 +47,12 @@ def research(request):
 
 def thread(request, thread_id):
     return JsonResponse(replay_thread(thread_id))
+
+
+def token_usage(request):
+    return JsonResponse(
+        {"summary": tokens.summarise_log(), "turns": tokens.read_log()[-40:]}
+    )
 
 
 def dossier(request):
