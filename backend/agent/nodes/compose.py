@@ -64,8 +64,30 @@ def nothing_to_show(findings):
     }
 
 
+def refuse_unsupported_claim(asserted_claim):
+    quoted = f' ("{asserted_claim}")' if asserted_claim else ""
+    return {
+        "type": "gap",
+        "text": (
+            f"The dossier holds no finding supporting that{quoted}. Nothing on record was ever "
+            "researched or written down to that effect, so I cannot confirm it. I can research it "
+            "now if you want it established."
+        ),
+        "findings": [],
+    }
+
+
 def compose_answer(state):
     findings = state.get("retrieved_findings", [])
+
+    if state.get("intent") == "memory_probe" and not findings:
+        block = refuse_unsupported_claim(state.get("asserted_claim"))
+        return {
+            "blocks": [block],
+            "dropped_finding_ids": [],
+            "final_answer": block["text"],
+            "messages": [AIMessage(block["text"])],
+        }
 
     prompt = render_prompt(
         "compose",
