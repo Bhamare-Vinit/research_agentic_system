@@ -128,3 +128,113 @@ body {
   padding: 30px 0;
 }
 
+.block {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+
+.block:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.block h2 {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+  font-weight: normal;
+}
+
+.block h3 {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 6px;
+  font-weight: normal;
+}
+
+.block p {
+  margin: 0 0 8px;
+}
+
+.records,
+.sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.record {
+  border-left: 2px solid var(--ink);
+  padding: 0 0 0 10px;
+  margin-bottom: 10px;
+}
+
+.record.stale {
+  border-left-color: var(--line);
+  color: var(--muted);
+}
+
+.claim {
+  margin-bottom: 3px;
+}
+
+.record-meta {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.record-meta a,
+.sources a {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.tag {
+  border: 1px solid var(--line);
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.tag.id {
+  color: var(--line);
+}
+
+.sources li {
+  margin-bottom: 3px;
+}
+
+.block.gap {
+  border-left: 2px solid var(--warn);
+  padding-left: 10px;
+}
+
+.block.gap h2 {
+  color: var(--warn);
+}
+
+.block.unknown pre {
+  background: #f2f0ea;
+  padding: 8px;
+  overflow-x: auto;
+  font-size: 11px;
+}
+
+.change {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .change {
+    grid-template-columns: 1fr;
+  }
+}

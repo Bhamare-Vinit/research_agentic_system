@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchHealth, streamResearch } from "./api.js";
+import BlockRenderer from "./blocks/BlockRenderer.jsx";
 
 export default function App() {
   const [health, setHealth] = useState(null);
@@ -71,7 +72,7 @@ export default function App() {
           </div>
           <div className="answer">
             {turn.answer ? (
-              turn.answer.final_answer || "No answer was produced."
+              <BlockRenderer blocks={turn.answer.blocks} />
             ) : (
               <span className="status">{status || "working"}</span>
             )}
