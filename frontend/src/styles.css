@@ -1,0 +1,130 @@
+:root {
+  --ink: #1b1b1b;
+  --paper: #fbfbf9;
+  --line: #c9c6bd;
+  --muted: #6d6a62;
+  --accent: #1b1b1b;
+  --warn: #8a3a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 16px 120px;
+}
+
+.masthead {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.masthead h1 {
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.turn {
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+  background: #fff;
+}
+
+.turn .question {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+  background: #f2f0ea;
+}
+
+.turn .question span {
+  color: var(--muted);
+  margin-right: 8px;
+}
+
+.turn .answer {
+  padding: 12px;
+}
+
+.composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.composer form {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+.composer input {
+  flex: 1;
+  font: inherit;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: inherit;
+}
+
+.composer button {
+  font: inherit;
+  padding: 9px 18px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  background: var(--muted);
+  border-color: var(--muted);
+  cursor: default;
+}
+
+.status {
+  color: var(--muted);
+  padding: 12px;
+}
+
+.failure {
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 30px 0;
+}
+
