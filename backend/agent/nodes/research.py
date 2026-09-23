@@ -5,6 +5,7 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from agent import llm
+from agent.nodes.decide import clamp_information
 from agent.prompts import render_prompt
 from agent.settings import RESEARCH_AGENT_MAX_STEPS
 from agent.tools import dossier_tools, web_tools
@@ -21,8 +22,9 @@ class FetchInput(BaseModel):
 
 
 class FindingInput(BaseModel):
-    topic: str = Field(description="the topic key for this research task")
-    information: str = Field(description="the information category for this research task")
+    information: str = Field(
+        description="which of the allowed information categories this fact belongs to"
+    )
     claim: str = Field(
         description="one self-contained factual sentence carrying the figure, unit and timeframe"
     )
@@ -43,7 +45,7 @@ def format_existing(findings):
     )
 
 
-def build_toolkit(default_topic, default_information, activity, written):
+def build_toolkit(topic, default_information, allowed_information, activity, written):
     def record(tool_name, summary, **extra):
         activity.append({"step": len(activity) + 1, "tool": tool_name, "summary": summary, **extra})
 
@@ -64,10 +66,12 @@ def build_toolkit(default_topic, default_information, activity, written):
             record("fetch_page", f"read {page['title']}", url=page["url"])
         return page
 
-    def run_write(topic, information, claim, source, date="", supersedes=""):
+    def run_write(information, claim, source, date="", supersedes=""):
         result = dossier_tools.write_finding(
-            topic or default_topic,
-            information or default_information,
+            topic,
+            clamp_information(information, allowed_information)
+            if allowed_information
+            else default_information,
             claim,
             source,
             date=date or None,
@@ -102,7 +106,10 @@ def build_toolkit(default_topic, default_information, activity, written):
         "write_finding": StructuredTool.from_function(
             func=run_write,
             name="write_finding",
-            description="Record one factual claim in the dossier with the url you read it on.",
+            description=(
+                "Record one factual claim in the dossier with the url you read it on. "
+                f"The information category must be one of: {', '.join(allowed_information or [default_information])}."
+            ),
             args_schema=FindingInput,
         ),
     }
@@ -114,15 +121,18 @@ def run_research(state):
     information = task.get("information") or "general"
     question = task.get("research_question") or state.get("user_query", "")
 
+    allowed_information = state.get("information") or [information]
+
     activity = []
     written = []
-    toolkit = build_toolkit(topic, information, activity, written)
+    toolkit = build_toolkit(topic, information, allowed_information, activity, written)
 
     prompt = render_prompt(
         "research",
         topic=topic,
         information=information,
         research_question=question,
+        allowed=", ".join(allowed_information),
         existing=format_existing(dossier_tools.get_dossier(topic, information)["findings"]),
     )
 

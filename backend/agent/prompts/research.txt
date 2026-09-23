@@ -8,6 +8,12 @@ Your task:
   information:       {information}
   research question: {research_question}
 
+Every finding you record must be filed under one of these information categories, and no others:  {allowed}
+
+File each finding under the category it genuinely belongs to. A claim about price goes under the
+cost category even when the task that sent you here was about something else. Filing a fact in the
+wrong category makes it unfindable later.
+
 What the dossier already holds on this exact slice:
 
 {existing}

@@ -1,3 +1,5 @@
+import difflib
+
 from agent import llm
 from agent.prompts import render_prompt
 from agent.schemas import Decision
@@ -21,6 +23,16 @@ def format_research_log(entries):
     if not entries:
         return "(no research has run yet this turn)"
     return "\n".join(f"- {entry.get('summary', entry)}" for entry in entries)
+
+
+def clamp_information(requested, allowed):
+    key = storage.slugify(requested or "")
+    if not allowed:
+        return key or "general"
+    if key in allowed:
+        return key
+    nearest = difflib.get_close_matches(key, allowed, n=1, cutoff=0.5)
+    return nearest[0] if nearest else allowed[0]
 
 
 def settled(decision, reason):
@@ -73,8 +85,8 @@ def decide(state):
         "decision": "research",
         "decision_reason": verdict.reason,
         "research_task": {
-            "topic": storage.slugify(task.topic or state.get("topic")),
-            "information": storage.slugify(task.information),
+            "topic": state.get("topic") or storage.slugify(task.topic),
+            "information": clamp_information(task.information, state.get("information") or []),
             "research_question": task.research_question,
         },
     }
