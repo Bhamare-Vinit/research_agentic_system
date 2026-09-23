@@ -46,6 +46,11 @@ TAVILY_API_KEY = read_text("TAVILY_API_KEY")
 MODEL_TEMPERATURE = read_text("MODEL_TEMPERATURE", "0")
 SEARCH_DEPTH = read_text("SEARCH_DEPTH", "advanced")
 
+LANGSMITH_TRACING = read_flag("LANGSMITH_TRACING", False)
+LANGSMITH_API_KEY = read_text("LANGSMITH_API_KEY")
+LANGSMITH_PROJECT = read_text("LANGSMITH_PROJECT", "dossier")
+LANGSMITH_ENDPOINT = read_text("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+
 DJANGO_SECRET_KEY = read_text("DJANGO_SECRET_KEY", "dossier-local-dev-only")
 DJANGO_DEBUG = read_flag("DJANGO_DEBUG", True)
 
@@ -63,6 +68,23 @@ FRONTEND_ORIGINS = [
 OPENAI_CONFIGURED = bool(OPENAI_API_KEY)
 OPENROUTER_CONFIGURED = bool(OPENROUTER_API_KEY)
 SEARCH_CONFIGURED = bool(TAVILY_API_KEY)
+
+
+TRACING_CONFIGURED = LANGSMITH_TRACING and bool(LANGSMITH_API_KEY)
+
+
+def apply_tracing_environment():
+    if not TRACING_CONFIGURED:
+        os.environ["LANGSMITH_TRACING"] = "false"
+        return False
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = LANGSMITH_API_KEY
+    os.environ["LANGSMITH_PROJECT"] = LANGSMITH_PROJECT
+    os.environ["LANGSMITH_ENDPOINT"] = LANGSMITH_ENDPOINT
+    return True
+
+
+TRACING_ENABLED = apply_tracing_environment()
 
 
 def active_provider():

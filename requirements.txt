@@ -14,3 +14,4 @@ truststore>=0.10
 
 python-dotenv>=1.0
 tiktoken>=0.9
+langsmith>=0.3
