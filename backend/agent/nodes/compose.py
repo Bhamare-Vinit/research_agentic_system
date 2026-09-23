@@ -54,6 +54,25 @@ def hydrate_blocks(specs, findings):
     return blocks, dropped
 
 
+def fill_source_blocks(blocks):
+    cited = []
+    seen = set()
+    for block in blocks:
+        for finding in block["findings"]:
+            if finding["id"] not in seen:
+                seen.add(finding["id"])
+                cited.append(finding)
+
+    for block in blocks:
+        if block["type"] != "sources":
+            continue
+        block["text"] = None
+        if not block["findings"]:
+            block["findings"] = list(cited)
+
+    return [block for block in blocks if block["type"] != "sources" or block["findings"]]
+
+
 def nothing_to_show(findings):
     if findings:
         return {"type": "findings", "text": None, "findings": findings}
@@ -99,6 +118,7 @@ def compose_answer(state):
 
     composition = llm.get_structured_llm(AnswerComposition).invoke(prompt)
     blocks, dropped = hydrate_blocks(composition.blocks, findings)
+    blocks = fill_source_blocks(blocks)
 
     if not blocks:
         blocks = [nothing_to_show(findings)]
