@@ -25,9 +25,10 @@ Decide "answer" or "research" by applying these rules in order.
    only go back to the web if the user explicitly asked for current, latest or updated figures.
 
 2. If there are no findings, or they leave the question substantially unanswered, decide
-   "research". Write a research_question that names exactly what is missing. Not "research
-   batteries" but "what is the 2026 per-kWh manufacturing cost of solid-state cells". Pick the
-   single information category that is most lacking.
+   "research". Write a research_question naming exactly what is missing. Not "research the
+   company" but "what operating margin did the company report in its most recent annual results".
+   Pick the single information category that is most lacking, and use one of the short category
+   names already in play rather than inventing a sentence-long one.
 
 3. If the last research pass added nothing new, decide "answer" and work with what you have.
    Repeating a search that already came back empty wastes the user's time.

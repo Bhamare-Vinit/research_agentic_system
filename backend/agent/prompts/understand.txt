@@ -24,6 +24,12 @@ to it loosely: "the batteries", "that company", "it", "the first thing we looked
 a new key when nothing listed matches. Reusing the right existing key is the single most important
 part of this job, because a new key makes everything already researched unreachable.
 
+The topic is the subject itself and nothing more: a company, a technology, a market, a person.
+Never fold the information dimension into it. "NVIDIA's data centre revenue" is the topic nvidia
+with the information data_centre_revenue, never the topic nvidia_data_centre_revenue. "the cost of
+solid-state batteries" is the topic solid_state_batteries with the information cost. Keep topic
+keys short, usually one or two words.
+
 INFORMATION
 List one to four snake_case dimensions the message asks about, such as cost, commercial_readiness,
 manufacturers, technology, timeline, risks, margins. Reuse the categories already listed under the

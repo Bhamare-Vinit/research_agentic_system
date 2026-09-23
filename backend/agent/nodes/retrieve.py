@@ -1,6 +1,8 @@
 from agent import tokens
 from agent.tools import dossier_tools, storage
 
+FALLBACK_CATEGORY_LIMIT = 4
+
 HISTORY_QUESTION_WORDS = (
     "change",
     "changed",
@@ -43,6 +45,25 @@ def retrieve_dossier(state):
             "returned": retrieved["returned"],
         }
 
+    fell_back_to = []
+    if not findings and state.get("intent") != "memory_probe":
+        known = dossier_tools.get_dossier_structure().get(topic, {})
+        ranked = sorted(known.items(), key=lambda entry: entry[1], reverse=True)
+        for dimension, _ in ranked[:FALLBACK_CATEGORY_LIMIT]:
+            if dimension in per_dimension:
+                continue
+            retrieved = dossier_tools.get_dossier(
+                topic, dimension, include_inactive=include_inactive
+            )
+            if not retrieved["findings"]:
+                continue
+            findings.extend(retrieved["findings"])
+            per_dimension[dimension] = {
+                "total_available": retrieved["total_available"],
+                "returned": retrieved["returned"],
+            }
+            fell_back_to.append(dimension)
+
     whole_dossier_tokens = tokens.count_tokens(storage.load_dossier())
     retrieved_tokens = tokens.count_tokens(findings)
 
@@ -52,6 +73,7 @@ def retrieve_dossier(state):
             "topic": topic,
             "dimensions": per_dimension,
             "included_superseded": include_inactive,
+            "fell_back_to": fell_back_to,
             "whole_dossier_tokens": whole_dossier_tokens,
             "retrieved_tokens": retrieved_tokens,
             "tokens_saved_pct": (
