@@ -43,6 +43,8 @@ OPENROUTER_BASE_URL = read_text("OPENROUTER_BASE_URL", "https://openrouter.ai/ap
 
 TAVILY_API_KEY = read_text("TAVILY_API_KEY")
 
+MODEL_TEMPERATURE = read_text("MODEL_TEMPERATURE", "0")
+
 DJANGO_SECRET_KEY = read_text("DJANGO_SECRET_KEY", "dossier-local-dev-only")
 DJANGO_DEBUG = read_flag("DJANGO_DEBUG", True)
 
