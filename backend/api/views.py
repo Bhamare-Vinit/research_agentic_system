@@ -5,7 +5,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 
 from agent import settings
 from agent.tools import dossier_tools, storage
-from api.events import run_stream
+from api.events import replay_thread, run_stream
 
 
 def health(request):
@@ -43,6 +43,10 @@ def research(request):
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
     return response
+
+
+def thread(request, thread_id):
+    return JsonResponse(replay_thread(thread_id))
 
 
 def dossier(request):

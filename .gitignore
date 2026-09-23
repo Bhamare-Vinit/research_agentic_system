@@ -6,7 +6,7 @@ venv/
 .pytest_cache/
 
 backend/data/dossier.json
-backend/data/checkpoints.sqlite
+backend/data/checkpoints.sqlite*
 backend/data/token_log.jsonl
 
 node_modules/

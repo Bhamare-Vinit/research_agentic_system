@@ -3,6 +3,7 @@ import json
 from langchain_core.messages import HumanMessage
 
 from agent import settings
+from agent.checkpoint import get_checkpointer
 from agent.graph import NODE_LABELS, build_graph, initial_state
 
 _graph = None
@@ -11,8 +12,34 @@ _graph = None
 def get_graph():
     global _graph
     if _graph is None:
-        _graph = build_graph()
+        _graph = build_graph(get_checkpointer())
     return _graph
+
+
+def replay_thread(thread_id):
+    snapshot = get_graph().get_state({"configurable": {"thread_id": thread_id}})
+    values = getattr(snapshot, "values", None) or {}
+
+    turns = []
+    for message in values.get("messages", []):
+        speaker = getattr(message, "type", "")
+        if speaker == "human":
+            turns.append({"query": message.content, "answer": None})
+        elif speaker == "ai" and turns:
+            turns[-1]["answer"] = {
+                "final_answer": message.content,
+                "blocks": [],
+                "dropped_finding_ids": [],
+                "retrieval_stats": {},
+                "iterations": 0,
+            }
+
+    if turns and turns[-1]["answer"] and values.get("blocks"):
+        turns[-1]["answer"]["blocks"] = values["blocks"]
+        turns[-1]["answer"]["retrieval_stats"] = values.get("retrieval_stats", {})
+        turns[-1]["answer"]["iterations"] = values.get("iteration", 0)
+
+    return {"thread_id": thread_id, "turns": turns}
 
 
 def sse(payload):

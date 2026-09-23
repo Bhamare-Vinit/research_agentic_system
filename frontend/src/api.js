@@ -10,6 +10,12 @@ export async function fetchDossier() {
   return response.json();
 }
 
+export async function fetchThread(threadId) {
+  const response = await fetch(`${BASE_URL}/threads/${threadId}/`);
+  if (!response.ok) return null;
+  return response.json();
+}
+
 export async function streamResearch(query, threadId, onEvent) {
   const response = await fetch(`${BASE_URL}/research/`, {
     method: "POST",

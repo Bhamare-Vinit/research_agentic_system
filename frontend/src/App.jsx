@@ -1,18 +1,54 @@
 import { useEffect, useState } from "react";
 
-import { fetchHealth, streamResearch } from "./api.js";
+import { fetchHealth, fetchThread, streamResearch } from "./api.js";
 import BlockRenderer from "./blocks/BlockRenderer.jsx";
+
+const THREAD_STORAGE_KEY = "dossier.thread";
+
+function rememberedThread() {
+  try {
+    return window.localStorage.getItem(THREAD_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberThread(threadId) {
+  try {
+    window.localStorage.setItem(THREAD_STORAGE_KEY, threadId);
+  } catch {
+    return;
+  }
+}
+
+function forgetThread() {
+  try {
+    window.localStorage.removeItem(THREAD_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
 
 export default function App() {
   const [health, setHealth] = useState(null);
   const [turns, setTurns] = useState([]);
-  const [threadId, setThreadId] = useState(null);
+  const [threadId, setThreadId] = useState(rememberedThread);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState(null);
   const [failure, setFailure] = useState(null);
 
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setHealth(null));
+  }, []);
+
+  useEffect(() => {
+    const remembered = rememberedThread();
+    if (!remembered) return;
+    fetchThread(remembered)
+      .then((session) => {
+        if (session && session.turns.length) setTurns(session.turns);
+      })
+      .catch(() => forgetThread());
   }, []);
 
   const running = status !== null;
@@ -36,6 +72,7 @@ export default function App() {
       }
       if (message.type === "done") {
         setThreadId(message.thread_id);
+        rememberThread(message.thread_id);
         setTurns((current) =>
           current.map((turn, index) =>
             index === current.length - 1 ? { ...turn, answer: message } : turn
@@ -52,6 +89,20 @@ export default function App() {
       <header className="masthead">
         <h1>Dossier</h1>
         <div className="meta">
+          {turns.length > 0 && (
+            <button
+              type="button"
+              className="reset"
+              onClick={() => {
+                forgetThread();
+                setThreadId(null);
+                setTurns([]);
+              }}
+            >
+              new session
+            </button>
+          )}
+          {" "}
           {health
             ? `${health.model} via ${health.provider}${health.search_configured ? " · tavily" : " · no search"}${health.tracing ? ` · tracing ${health.tracing}` : ""}`
             : "backend unreachable"}
