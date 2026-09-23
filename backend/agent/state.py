@@ -21,5 +21,6 @@ class DossierState(TypedDict, total=False):
     decision_reason: Optional[str]
     iteration: int
     blocks: list[dict]
+    dropped_finding_ids: list[str]
     final_answer: Optional[str]
     token_usage: dict
