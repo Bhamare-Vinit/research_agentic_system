@@ -31,10 +31,6 @@ class FindingItem(BaseModel):
     date: str = Field(
         default="", description="publication date of the source as YYYY-MM-DD, or empty for today"
     )
-    replaces: str = Field(
-        default="",
-        description="id of an existing finding this one supersedes, when yours is fresher and contradicts it",
-    )
 
 
 class WriteFindingsInput(BaseModel):
@@ -123,7 +119,6 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
                     finding_id=outcome_row["id"],
                     source=item.get("source"),
                     information=outcome_row["information"],
-                    superseded=outcome_row.get("replaced"),
                 )
             elif outcome_row["status"] == "duplicate":
                 record("write_findings", f"already on file: {item['claim'][:90]}")

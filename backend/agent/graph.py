@@ -35,7 +35,6 @@ def initial_state(user_query):
         "retrieved_findings_cache": [],
         "activity": [],
         "research_task": None,
-        "research_call_id": None,
         "research_result": None,
         "findings_added": 0,
         "iteration": 0,

@@ -352,7 +352,6 @@ def run_main_agent(state):
                     "retrieved_findings_cache": list(seen_findings.values()),
                     "activity": activity,
                     "research_task": outcome["research_task"],
-                    "research_call_id": call["id"],
                 }
 
         if "blocks" in outcome:

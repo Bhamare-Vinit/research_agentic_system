@@ -62,15 +62,6 @@ def available_providers():
     ]
 
 
-def provider_chain_description():
-    names = [name for name, _ in available_providers()]
-    if not names:
-        return "no provider configured"
-    if len(names) == 1:
-        return f"{names[0]} (no fallback configured)"
-    return f"{names[0]}, falling back to {' then '.join(names[1:])}"
-
-
 def build_chain(temperature, to_runnables):
     runnables = []
     for _, build_model in available_providers():
@@ -85,30 +76,9 @@ def build_chain(temperature, to_runnables):
     return primary.with_fallbacks(fallbacks) if fallbacks else primary
 
 
-def get_llm(temperature=Ellipsis):
-    chosen = default_temperature() if temperature is Ellipsis else temperature
-    return build_chain(chosen, lambda model: [model])
-
-
-def get_structured_llm(schema, temperature=Ellipsis):
-    chosen = default_temperature() if temperature is Ellipsis else temperature
-
-    def to_runnables(model):
-        return [
-            model.with_structured_output(schema, method="json_schema"),
-            model.with_structured_output(schema, method="function_calling"),
-        ]
-
-    return build_chain(chosen, to_runnables)
-
-
 def get_tool_llm(tools, temperature=Ellipsis):
     chosen = default_temperature() if temperature is Ellipsis else temperature
     return build_chain(chosen, lambda model: [model.bind_tools(tools)])
-
-
-def log_provider_chain():
-    logger.info("dossier llm: %s", provider_chain_description())
 
 
 def message_text(response):

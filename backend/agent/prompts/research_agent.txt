@@ -31,9 +31,8 @@ write_findings(findings)
                  understand it.
     source       the exact url you read the fact on. Never a search page, never a guess, never a
                  url you did not open.
-    date         the publication date of the source when you saw one, otherwise leave it empty.
-    replaces     the id of a finding listed above that this one supersedes, when yours is fresher
-                 and genuinely contradicts it. Otherwise leave it empty.
+    date         the publication date of the source when you saw one. Get this right: it is how
+                 the Main Agent tells a current figure from a superseded one.
 
 report(subject_confirmed, could_not_establish, notes)
   Ends your work and hands your findings back to the Main Agent. Always finish with this.
@@ -80,7 +79,10 @@ in your notes what you found instead. Never substitute the nearest thing you fou
 you were asked about.
 
 Never record a claim you did not read in the source text. Never invent a url. Do not repeat a fact
-already listed above unless you are superseding it with fresher evidence.
+already listed above.
+
+If you find a figure that disagrees with one already on file, record it anyway with its own date.
+Both belong in the case file. The Main Agent compares the dates and tells the user what changed.
 
 Finishing
 

@@ -69,12 +69,3 @@ def next_finding_id(dossier, topic, information):
         if suffix.isdigit():
             highest = max(highest, int(suffix))
     return f"{topic}_{information}_{highest + 1:03d}"
-
-
-def find_by_id(dossier, finding_id):
-    for categories in dossier.values():
-        for findings in categories.values():
-            for finding in findings:
-                if finding.get("id") == finding_id:
-                    return finding
-    return None

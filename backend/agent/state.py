@@ -11,7 +11,6 @@ class DossierState(TypedDict, total=False):
     retrieved_findings_cache: list[dict]
     activity: Annotated[list[dict], operator.add]
     research_task: Optional[dict]
-    research_call_id: Optional[str]
     research_result: Optional[dict]
     findings_added: int
     iteration: int
