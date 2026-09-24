@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { fetchHealth, fetchThread, streamResearch } from "./api.js";
 import BlockRenderer from "./blocks/BlockRenderer.jsx";
+import ProgressBlock from "./blocks/ProgressBlock.jsx";
 
 const THREAD_STORAGE_KEY = "dossier.thread";
 
@@ -58,6 +59,7 @@ export default function App() {
   const [threadId, setThreadId] = useState(rememberedThread);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState(null);
+  const [steps, setSteps] = useState([]);
   const [failure, setFailure] = useState(null);
 
   useEffect(() => {
@@ -83,12 +85,19 @@ export default function App() {
 
     setDraft("");
     setFailure(null);
-    setStatus("Opening the dossier");
+    setStatus("Opening the case file");
+    setSteps([]);
     setTurns((current) => [...current, { query, answer: null }]);
 
     await streamResearch(query, threadId, (message) => {
       if (message.type === "status") {
         setStatus(message.message);
+      }
+      if (message.type === "step") {
+        setSteps((current) => [...current, message]);
+      }
+      if (message.type === "decision" && message.decision === "research") {
+        setStatus("Researching: " + message.reason);
       }
       if (message.type === "error") {
         setFailure(message.message);
@@ -105,6 +114,7 @@ export default function App() {
     });
 
     setStatus(null);
+    setSteps([]);
   }
 
   return (
@@ -151,7 +161,7 @@ export default function App() {
                 <TurnMeta answer={turn.answer} />
               </>
             ) : (
-              <span className="status">{status || "working"}</span>
+              <ProgressBlock status={status || "working"} steps={steps} />
             )}
           </div>
         </article>
