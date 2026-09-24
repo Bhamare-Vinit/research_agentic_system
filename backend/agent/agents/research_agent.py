@@ -5,7 +5,6 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from agent import llm
-from agent.nodes.decide import clamp_information
 from agent.prompts import render_prompt
 from agent.settings import RESEARCH_AGENT_MAX_STEPS
 from agent.tools import dossier_tools, web_tools
@@ -22,9 +21,6 @@ class FetchInput(BaseModel):
 
 
 class FindingInput(BaseModel):
-    information: str = Field(
-        description="which of the allowed information categories this fact belongs to"
-    )
     claim: str = Field(
         description="one self-contained factual sentence carrying the figure, unit and timeframe"
     )
@@ -45,9 +41,17 @@ def format_existing(findings):
     )
 
 
-def build_toolkit(topic, default_information, allowed_information, activity, written):
+def build_toolkit(topic, information, activity, written):
     def record(tool_name, summary, **extra):
-        activity.append({"step": len(activity) + 1, "tool": tool_name, "summary": summary, **extra})
+        activity.append(
+            {
+                "step": len(activity) + 1,
+                "agent": "research",
+                "tool": tool_name,
+                "summary": summary,
+                **extra,
+            }
+        )
 
     def run_search(query):
         result = web_tools.web_search(query)
@@ -66,16 +70,9 @@ def build_toolkit(topic, default_information, allowed_information, activity, wri
             record("fetch_page", f"read {page['title']}", url=page["url"])
         return page
 
-    def run_write(information, claim, source, date="", supersedes=""):
+    def run_write(claim, source, date="", supersedes=""):
         result = dossier_tools.write_finding(
-            topic,
-            clamp_information(information, allowed_information)
-            if allowed_information
-            else default_information,
-            claim,
-            source,
-            date=date or None,
-            supersedes=supersedes or None,
+            topic, information, claim, source, date=date or None, supersedes=supersedes or None
         )
         if result["status"] == "written":
             written.append(result["id"])
@@ -107,44 +104,43 @@ def build_toolkit(topic, default_information, allowed_information, activity, wri
             func=run_write,
             name="write_finding",
             description=(
-                "Record one factual claim in the dossier with the url you read it on. "
-                f"The information category must be one of: {', '.join(allowed_information or [default_information])}."
+                "Record one factual claim in the case file with the url you read it on. "
+                f"It is filed under {topic} / {information}."
             ),
             args_schema=FindingInput,
         ),
     }
 
 
-def run_research(state):
+def run_research_agent(state):
     task = state.get("research_task") or {}
-    topic = task.get("topic") or state.get("topic") or "general"
+    topic = task.get("topic") or "general"
     information = task.get("information") or "general"
     question = task.get("research_question") or state.get("user_query", "")
 
-    allowed_information = state.get("information") or [information]
-
     activity = []
     written = []
-    toolkit = build_toolkit(topic, information, allowed_information, activity, written)
+    toolkit = build_toolkit(topic, information, activity, written)
 
     prompt = render_prompt(
-        "research",
+        "research_agent",
         topic=topic,
         information=information,
         research_question=question,
-        allowed=", ".join(allowed_information),
         existing=format_existing(dossier_tools.get_dossier(topic, information)["findings"]),
     )
 
     model = llm.get_tool_llm(list(toolkit.values()))
-    messages = [HumanMessage(prompt)]
+    transcript = [HumanMessage(prompt)]
+    closing = ""
 
     for _ in range(RESEARCH_AGENT_MAX_STEPS):
-        response = model.invoke(messages)
-        messages.append(response)
+        response = model.invoke(transcript)
+        transcript.append(response)
 
         calls = getattr(response, "tool_calls", None)
         if not calls:
+            closing = str(response.content or "")
             break
 
         for call in calls:
@@ -153,7 +149,7 @@ def run_research(state):
                 output = {"error": f"there is no tool called {call['name']}"}
             else:
                 output = selected.invoke(call["args"])
-            messages.append(
+            transcript.append(
                 ToolMessage(
                     content=json.dumps(output, default=str)[:TOOL_OUTPUT_LIMIT],
                     tool_call_id=call["id"],
@@ -161,8 +157,14 @@ def run_research(state):
             )
 
     return {
-        "research_log": activity,
+        "activity": activity,
         "findings_added": len(written),
         "iteration": state.get("iteration", 0) + 1,
         "research_task": None,
+        "research_result": {
+            "topic": topic,
+            "information": information,
+            "findings_added": len(written),
+            "summary": closing,
+        },
     }

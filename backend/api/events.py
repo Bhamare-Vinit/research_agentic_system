@@ -33,6 +33,7 @@ def replay_thread(thread_id):
                 "dropped_finding_ids": [],
                 "retrieval_stats": {},
                 "iterations": 0,
+                "llm": {},
             }
 
     if turns and turns[-1]["answer"] and values.get("blocks"):
@@ -47,8 +48,13 @@ def sse(payload):
     return f"data: {json.dumps(payload, default=str)}\n\n"
 
 
-def describe_research_entry(entry):
-    event = {"type": "step", "tool": entry.get("tool"), "message": entry.get("summary")}
+def describe_activity(entry):
+    event = {
+        "type": "step",
+        "agent": entry.get("agent"),
+        "tool": entry.get("tool"),
+        "message": entry.get("summary"),
+    }
     if entry.get("finding_id"):
         event["finding_id"] = entry["finding_id"]
         event["source"] = entry.get("source")
@@ -60,37 +66,34 @@ def node_events(node, payload, answer):
     if not isinstance(payload, dict):
         return events
 
-    if node == "understand_query":
-        events.append(
-            {
-                "type": "understanding",
-                "topic": payload.get("topic"),
-                "information": payload.get("information"),
-                "intent": payload.get("intent"),
-            }
-        )
+    events.extend(describe_activity(entry) for entry in payload.get("activity", []))
 
-    if node == "retrieve_dossier":
-        answer["retrieval_stats"] = payload.get("retrieval_stats", {})
-        events.append({"type": "retrieval", "stats": answer["retrieval_stats"]})
-
-    if node == "decide":
+    task = payload.get("research_task")
+    if task:
         events.append(
             {
                 "type": "decision",
-                "decision": payload.get("decision"),
-                "reason": payload.get("decision_reason"),
+                "decision": "research",
+                "reason": task.get("research_question", ""),
             }
         )
 
-    if node == "research":
+    if node == "research_agent":
         answer["iterations"] = payload.get("iteration", answer["iterations"])
-        events.extend(describe_research_entry(entry) for entry in payload.get("research_log", []))
 
-    if node == "compose_answer":
-        answer["blocks"] = payload.get("blocks", [])
+    if payload.get("blocks"):
+        answer["blocks"] = payload["blocks"]
         answer["final_answer"] = payload.get("final_answer", "")
         answer["dropped_finding_ids"] = payload.get("dropped_finding_ids", [])
+        answer["retrieval_stats"] = payload.get("retrieval_stats", {})
+        events.append(
+            {
+                "type": "decision",
+                "decision": "answer",
+                "reason": "the case file holds enough to answer",
+            }
+        )
+        events.append({"type": "retrieval", "stats": answer["retrieval_stats"]})
 
     return events
 
@@ -119,7 +122,7 @@ def run_stream(query, thread_id):
         "llm": {},
     }
 
-    yield sse({"type": "status", "node": "start", "message": "Opening the dossier"})
+    yield sse({"type": "status", "node": "start", "message": "Opening the case file"})
 
     try:
         with get_usage_metadata_callback() as usage:
