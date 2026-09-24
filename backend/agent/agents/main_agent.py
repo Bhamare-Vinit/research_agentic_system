@@ -3,6 +3,7 @@ import json
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
+from typing import Literal
 
 from agent import llm, tokens
 from agent.prompts import render_prompt
@@ -13,22 +14,37 @@ BLOCK_TYPES = ("summary", "findings", "sources", "gap", "update")
 PROSE_BLOCKS = ("summary", "gap")
 HISTORY_TURNS = 8
 
+GENERIC_CATEGORIES = dossier_tools.GENERIC_CATEGORIES
+
 
 class RetrieveInput(BaseModel):
     topic: str = Field(description="the topic key exactly as check_memory showed it")
     information: str = Field(description="the information category within that topic")
 
 
+class ResearchPlanItem(BaseModel):
+    information: str = Field(
+        description="a snake_case information category, such as architecture, pricing, benchmarks, limitations"
+    )
+    what_to_find: str = Field(
+        description="what the Research Agent should establish under this category"
+    )
+
+
 class ResearchInput(BaseModel):
     topic: str = Field(description="the topic key this research belongs under")
-    information: str = Field(description="the information category this research belongs under")
     research_question: str = Field(
-        description="the specific question the Research Agent should answer from live sources"
+        description="the overall question the Research Agent should answer from live sources"
+    )
+    plan: list[ResearchPlanItem] = Field(
+        description="the categories to cover, usually three to six, each with what to find in it"
     )
 
 
 class AnswerBlock(BaseModel):
-    type: str = Field(description="one of summary, findings, sources, gap, update")
+    type: Literal["summary", "findings", "sources", "gap", "update"] = Field(
+        description="which kind of block this is"
+    )
     text: str = Field(default="", description="prose for summary, gap and update blocks")
     finding_ids: list[str] = Field(
         default_factory=list, description="ids copied exactly from retrieve, never invented"
@@ -131,7 +147,33 @@ def build_toolkit(seen_findings, activity, outcome, iteration):
         )
         return result
 
-    def run_research(topic, information, research_question):
+    def run_research(topic, research_question, plan):
+        steps = [
+            item.model_dump() if isinstance(item, ResearchPlanItem) else dict(item)
+            for item in plan or []
+        ]
+        for step in steps:
+            step["information"] = storage.slugify(step.get("information"))
+
+        if not steps:
+            record("research", "rejected a research request with no plan")
+            return {
+                "status": "rejected",
+                "reason": "give a plan: the categories to cover and what to find in each.",
+            }
+
+        useless = [step["information"] for step in steps if step["information"] in GENERIC_CATEGORIES]
+        if useless:
+            record("research", f"rejected {', '.join(useless)} as categories")
+            return {
+                "status": "rejected",
+                "reason": (
+                    f"{', '.join(useless)} name no particular kind of information. Say what you "
+                    "actually want to know: architecture, pricing, benchmarks, limitations, "
+                    "training_data, release_date, revenue, manufacturers, timeline, use_cases."
+                ),
+            }
+
         if iteration >= MAX_RESEARCH_ITERATIONS:
             record("research", "research limit reached, answering from what is on file")
             return {
@@ -140,11 +182,19 @@ def build_toolkit(seen_findings, activity, outcome, iteration):
             }
         outcome["research_task"] = {
             "topic": storage.slugify(topic),
-            "information": storage.slugify(information),
             "research_question": research_question,
+            "plan": steps,
         }
-        record("research", f"handed to the Research Agent: {research_question}")
-        return {"status": "dispatched", "research_question": research_question}
+        record(
+            "research",
+            f"handed to the Research Agent: {research_question}",
+            plan=[step["information"] for step in steps],
+        )
+        return {
+            "status": "dispatched",
+            "research_question": research_question,
+            "covering": [step["information"] for step in steps],
+        }
 
     def run_answer(blocks):
         outcome["blocks"] = [as_block(block) for block in blocks]
@@ -187,14 +237,39 @@ def opening_transcript(state):
     return [HumanMessage(prompt)]
 
 
+def research_report(result):
+    lines = [
+        f"The Research Agent filed {result.get('findings_added', 0)} findings."
+    ]
+
+    covered = result.get("categories_covered") or []
+    created = result.get("categories_created") or []
+    missing = result.get("could_not_establish") or []
+
+    if covered:
+        lines.append(f"Categories now holding findings: {', '.join(covered)}.")
+    if created:
+        lines.append(
+            f"It opened new categories you did not ask for: {', '.join(created)}. "
+            "Retrieve them too if they bear on the question."
+        )
+    if missing:
+        lines.append(f"It could not establish: {', '.join(missing)}.")
+    if not result.get("subject_confirmed", True):
+        lines.append(
+            "It could not confirm the sources were about this subject at all. Tell the user you "
+            "could not find it rather than presenting what it did find."
+        )
+    if result.get("notes"):
+        lines.append(f"Its report: {result['notes']}")
+
+    lines.append("Check the case file again with retrieve before you decide anything.")
+    return " ".join(lines)
+
+
 def resumed_transcript(state):
     transcript = list(state.get("agent_messages") or [])
-    result = state.get("research_result") or {}
-    summary = (
-        f"The Research Agent finished. It added {result.get('findings_added', 0)} new findings "
-        f"to the case file. {result.get('summary', '')}".strip()
-    )
-    transcript.append(HumanMessage(f"{summary} Check the case file again before you decide."))
+    transcript.append(HumanMessage(research_report(state.get("research_result") or {})))
     return transcript
 
 

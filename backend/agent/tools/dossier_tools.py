@@ -1,4 +1,5 @@
 import datetime
+import difflib
 from urllib.parse import urlparse
 
 from agent.settings import RETRIEVAL_TOP_K
@@ -113,3 +114,147 @@ def get_findings_by_ids(finding_ids):
         else:
             resolved.append(finding)
     return resolved, missing
+
+
+GENERIC_CATEGORIES = {
+    "research",
+    "info",
+    "information",
+    "data",
+    "general",
+    "misc",
+    "details",
+    "notes",
+    "findings",
+    "results",
+    "summary",
+    "other",
+    "topic",
+    "overview",
+}
+
+
+def resolve_information(requested, preferred):
+    key = storage.slugify(requested or "")
+    if not key:
+        return None
+    if preferred and key not in preferred:
+        nearest = difflib.get_close_matches(key, preferred, n=1, cutoff=0.8)
+        if nearest:
+            return nearest[0]
+    return key
+
+
+def matches_existing(finding, claim, source):
+    same_claim = str(finding.get("claim", "")).strip().lower() == claim.lower()
+    return same_claim and finding.get("source") == source
+
+
+def apply_replacement(dossier, record, replaces):
+    if not replaces:
+        return None
+
+    older = storage.find_by_id(dossier, str(replaces).strip())
+    if older is None or older.get("id") == record["id"]:
+        return None
+
+    if str(record["date"]) >= str(older.get("date") or ""):
+        older["active"] = False
+        older["superseded_by"] = record["id"]
+        record["supersedes"] = older["id"]
+        return older["id"]
+
+    record["active"] = False
+    record["supersedes"] = older["id"]
+    return None
+
+
+def write_findings(topic, items, preferred_information=None):
+    topic_key = storage.slugify(topic)
+    today = datetime.date.today().isoformat()
+    expected = set(preferred_information or [])
+    results = []
+
+    with storage.dossier_transaction() as dossier:
+        for item in items:
+            claim = str(item.get("claim") or "").strip()
+            source = str(item.get("source") or "").strip()
+            information = resolve_information(item.get("information"), preferred_information)
+
+            if information is None or information in GENERIC_CATEGORIES:
+                results.append(
+                    {
+                        "status": "rejected",
+                        "claim": claim[:90],
+                        "reason": (
+                            f"'{item.get('information')}' names no particular kind of information. "
+                            "Use a category that says what the fact is about, such as pricing, "
+                            "architecture, benchmarks, limitations or training_data."
+                        ),
+                    }
+                )
+                continue
+
+            if not claim:
+                results.append({"status": "rejected", "reason": "the claim was empty"})
+                continue
+            if not is_real_source(source):
+                results.append(
+                    {
+                        "status": "rejected",
+                        "claim": claim[:90],
+                        "reason": "the source must be a real http or https url from a page you actually read",
+                    }
+                )
+                continue
+
+            existing = storage.ensure_slice(dossier, topic_key, information)
+            duplicate = next(
+                (finding for finding in existing if matches_existing(finding, claim, source)),
+                None,
+            )
+            if duplicate:
+                results.append(
+                    {
+                        "status": "duplicate",
+                        "id": duplicate["id"],
+                        "information": information,
+                    }
+                )
+                continue
+
+            record = {
+                "id": storage.next_finding_id(dossier, topic_key, information),
+                "claim": claim,
+                "source": source,
+                "date": str(item.get("date") or "").strip() or today,
+                "active": True,
+                "supersedes": None,
+                "superseded_by": None,
+                "last_verified": today,
+            }
+
+            replaced = apply_replacement(dossier, record, item.get("replaces"))
+            existing.append(record)
+
+            results.append(
+                {
+                    "status": "written",
+                    "id": record["id"],
+                    "information": information,
+                    "replaced": replaced,
+                    "active": record["active"],
+                    "new_category": bool(expected) and information not in expected,
+                }
+            )
+
+    written = [result for result in results if result["status"] == "written"]
+    return {
+        "topic": topic_key,
+        "written": len(written),
+        "categories": sorted({result["information"] for result in written}),
+        "new_categories": sorted(
+            {result["information"] for result in written if result["new_category"]}
+        ),
+        "results": results,
+    }

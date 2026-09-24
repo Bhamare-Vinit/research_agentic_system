@@ -34,6 +34,7 @@ def openai_chat_model(temperature):
         api_key=settings.OPENAI_API_KEY,
         timeout=REQUEST_TIMEOUT_SECONDS,
         max_retries=MAX_REQUEST_RETRIES,
+        use_responses_api=True,
         **temperature_kwargs(temperature),
     )
 
@@ -108,3 +109,17 @@ def get_tool_llm(tools, temperature=Ellipsis):
 
 def log_provider_chain():
     logger.info("dossier llm: %s", provider_chain_description())
+
+
+def message_text(response):
+    content = getattr(response, "content", "")
+    if isinstance(content, str):
+        return content.strip()
+
+    parts = []
+    for block in content or []:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") in {"text", "output_text"}:
+            parts.append(block.get("text", ""))
+    return " ".join(part for part in parts if part).strip()

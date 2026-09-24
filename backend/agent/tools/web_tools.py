@@ -6,7 +6,7 @@ from agent import settings
 
 USER_AGENT = "DossierResearchAgent/1.0 (autonomous research agent; take-home assignment)"
 FETCH_TIMEOUT_SECONDS = 15
-SNIPPET_LIMIT = 600
+SNIPPET_LIMIT = 350
 MIN_READABLE_CHARS = 250
 
 

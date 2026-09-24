@@ -20,7 +20,10 @@ class FetchInput(BaseModel):
     url: str = Field(description="the full http or https url of a page to read")
 
 
-class FindingInput(BaseModel):
+class FindingItem(BaseModel):
+    information: str = Field(
+        description="the category this fact belongs to, in snake_case, from the plan or a new one you judge is needed"
+    )
     claim: str = Field(
         description="one self-contained factual sentence carrying the figure, unit and timeframe"
     )
@@ -28,20 +31,53 @@ class FindingInput(BaseModel):
     date: str = Field(
         default="", description="publication date of the source as YYYY-MM-DD, or empty for today"
     )
-    supersedes: str = Field(
-        default="", description="id of an existing finding this one replaces, or empty"
+    replaces: str = Field(
+        default="",
+        description="id of an existing finding this one supersedes, when yours is fresher and contradicts it",
     )
 
 
-def format_existing(findings):
-    if not findings:
-        return "(nothing recorded on this slice yet)"
+class WriteFindingsInput(BaseModel):
+    findings: list[FindingItem] = Field(
+        description="every fact you have gathered, each tagged with its category"
+    )
+
+
+class ReportInput(BaseModel):
+    subject_confirmed: bool = Field(
+        description="true if the sources were genuinely about this subject, false if you could not find it"
+    )
+    could_not_establish: list[str] = Field(
+        default_factory=list,
+        description="parts of the plan you found no reliable information for",
+    )
+    notes: str = Field(
+        description="one or two sentences for the Main Agent: what you covered and anything it should know"
+    )
+
+
+def format_plan(plan):
+    if not plan:
+        return "  (no plan given, research the question as it stands)"
     return "\n".join(
-        f"- [{finding['id']}] ({finding.get('date')}) {finding['claim']}" for finding in findings
+        f"  {item.get('information')}  —  {item.get('what_to_find', '')}" for item in plan
     )
 
 
-def build_toolkit(topic, information, activity, written):
+def format_existing(topic):
+    structure = dossier_tools.get_dossier_structure().get(topic, {})
+    if not structure:
+        return "  (nothing recorded on this topic yet)"
+
+    lines = []
+    for category in structure:
+        lines.append(f"  {category}:")
+        for finding in dossier_tools.get_dossier(topic, category)["findings"]:
+            lines.append(f"    [{finding['id']}] ({finding.get('date')}) {finding['claim']}")
+    return "\n".join(lines)
+
+
+def build_toolkit(topic, preferred, activity, written, created, outcome):
     def record(tool_name, summary, **extra):
         activity.append(
             {
@@ -70,22 +106,40 @@ def build_toolkit(topic, information, activity, written):
             record("fetch_page", f"read {page['title']}", url=page["url"])
         return page
 
-    def run_write(claim, source, date="", supersedes=""):
-        result = dossier_tools.write_finding(
-            topic, information, claim, source, date=date or None, supersedes=supersedes or None
-        )
-        if result["status"] == "written":
-            written.append(result["id"])
-            record(
-                "write_finding",
-                f"recorded: {claim}",
-                finding_id=result["id"],
-                source=source,
-                superseded=result.get("superseded"),
-            )
-        else:
-            record("write_finding", f"rejected a finding: {result.get('reason', result['status'])}")
+    def run_write(findings):
+        items = [
+            finding.model_dump() if isinstance(finding, FindingItem) else dict(finding)
+            for finding in findings
+        ]
+        result = dossier_tools.write_findings(topic, items, preferred_information=preferred)
+        created.update(result["new_categories"])
+
+        for item, outcome_row in zip(items, result["results"]):
+            if outcome_row["status"] == "written":
+                written.append(outcome_row["id"])
+                record(
+                    "write_findings",
+                    f"filed under {outcome_row['information']}: {item['claim']}",
+                    finding_id=outcome_row["id"],
+                    source=item.get("source"),
+                    information=outcome_row["information"],
+                    superseded=outcome_row.get("replaced"),
+                )
+            elif outcome_row["status"] == "duplicate":
+                record("write_findings", f"already on file: {item['claim'][:90]}")
+            else:
+                record("write_findings", f"rejected: {outcome_row.get('reason', '')[:110]}")
+
         return result
+
+    def run_report(subject_confirmed, notes, could_not_establish=None):
+        outcome["report"] = {
+            "subject_confirmed": subject_confirmed,
+            "could_not_establish": list(could_not_establish or []),
+            "notes": notes,
+        }
+        record("report", notes[:110])
+        return {"status": "received"}
 
     return {
         "web_search": StructuredTool.from_function(
@@ -100,14 +154,21 @@ def build_toolkit(topic, information, activity, written):
             description="Read one web page and get back its article text.",
             args_schema=FetchInput,
         ),
-        "write_finding": StructuredTool.from_function(
+        "write_findings": StructuredTool.from_function(
             func=run_write,
-            name="write_finding",
+            name="write_findings",
             description=(
-                "Record one factual claim in the case file with the url you read it on. "
-                f"It is filed under {topic} / {information}."
+                f"File many facts at once under the topic {topic}, each tagged with its own "
+                "category. Use a plan category where one fits, or a new category when the fact "
+                "belongs somewhere the plan did not anticipate."
             ),
-            args_schema=FindingInput,
+            args_schema=WriteFindingsInput,
+        ),
+        "report": StructuredTool.from_function(
+            func=run_report,
+            name="report",
+            description="Finish the research and hand your report back to the Main Agent.",
+            args_schema=ReportInput,
         ),
     }
 
@@ -115,24 +176,27 @@ def build_toolkit(topic, information, activity, written):
 def run_research_agent(state):
     task = state.get("research_task") or {}
     topic = task.get("topic") or "general"
-    information = task.get("information") or "general"
     question = task.get("research_question") or state.get("user_query", "")
+    plan = task.get("plan") or []
+    preferred = [item["information"] for item in plan if item.get("information")]
 
     activity = []
     written = []
-    toolkit = build_toolkit(topic, information, activity, written)
+    created = set()
+    outcome = {}
+    toolkit = build_toolkit(topic, preferred, activity, written, created, outcome)
 
     prompt = render_prompt(
         "research_agent",
         topic=topic,
-        information=information,
         research_question=question,
-        existing=format_existing(dossier_tools.get_dossier(topic, information)["findings"]),
+        plan=format_plan(plan),
+        existing=format_existing(topic),
     )
 
     model = llm.get_tool_llm(list(toolkit.values()))
     transcript = [HumanMessage(prompt)]
-    closing = ""
+    spoken = ""
 
     for _ in range(RESEARCH_AGENT_MAX_STEPS):
         response = model.invoke(transcript)
@@ -140,21 +204,38 @@ def run_research_agent(state):
 
         calls = getattr(response, "tool_calls", None)
         if not calls:
-            closing = str(response.content or "")
+            spoken = llm.message_text(response)
             break
 
         for call in calls:
             selected = toolkit.get(call["name"])
             if selected is None:
-                output = {"error": f"there is no tool called {call['name']}"}
+                result = {"error": f"there is no tool called {call['name']}"}
             else:
-                output = selected.invoke(call["args"])
+                result = selected.invoke(call["args"])
             transcript.append(
                 ToolMessage(
-                    content=json.dumps(output, default=str)[:TOOL_OUTPUT_LIMIT],
+                    content=json.dumps(result, default=str)[:TOOL_OUTPUT_LIMIT],
                     tool_call_id=call["id"],
                 )
             )
+
+        if "report" in outcome:
+            break
+
+    report = outcome.get("report") or {
+        "subject_confirmed": bool(written),
+        "could_not_establish": [],
+        "notes": spoken or "The Research Agent stopped without filing a report.",
+    }
+
+    covered = sorted(
+        {
+            entry["information"]
+            for entry in activity
+            if entry.get("tool") == "write_findings" and entry.get("information")
+        }
+    )
 
     return {
         "activity": activity,
@@ -163,8 +244,11 @@ def run_research_agent(state):
         "research_task": None,
         "research_result": {
             "topic": topic,
-            "information": information,
             "findings_added": len(written),
-            "summary": closing,
+            "categories_covered": covered,
+            "categories_created": sorted(created),
+            "could_not_establish": report["could_not_establish"],
+            "subject_confirmed": report["subject_confirmed"],
+            "notes": report["notes"],
         },
     }
