@@ -13,7 +13,6 @@ from agent.tools import dossier_tools, storage
 
 BLOCK_TYPES = ("summary", "findings", "gap", "update")
 PROSE_BLOCKS = ("summary", "gap")
-BLOCKS_SHOWING_URLS = ("findings", "update")
 HISTORY_TURNS = 8
 TOOL_OUTPUT_LIMIT = 30000
 
@@ -123,23 +122,16 @@ def summary_first(blocks, fallback_text):
 
 
 def add_source_block(blocks):
-    shown_urls = {
-        finding["source"]
-        for block in blocks
-        if block["type"] in BLOCKS_SHOWING_URLS
-        for finding in block["findings"]
-    }
-
-    unshown = []
-    seen_urls = set(shown_urls)
+    cited = []
+    seen_urls = set()
     for block in blocks:
         for finding in block["findings"]:
             if finding["source"] not in seen_urls:
                 seen_urls.add(finding["source"])
-                unshown.append(finding)
+                cited.append(finding)
 
-    if unshown:
-        blocks.append({"type": "sources", "text": None, "findings": unshown})
+    if cited:
+        blocks.append({"type": "sources", "text": None, "findings": cited})
     return blocks
 
 
