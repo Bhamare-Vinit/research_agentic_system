@@ -1,6 +1,5 @@
 import FindingsBlock from "./FindingsBlock.jsx";
 import GapBlock from "./GapBlock.jsx";
-import SourcesBlock from "./SourcesBlock.jsx";
 import SummaryBlock from "./SummaryBlock.jsx";
 import UnknownBlock from "./UnknownBlock.jsx";
 import UpdateBlock from "./UpdateBlock.jsx";
@@ -9,7 +8,6 @@ const DETAIL_RENDERERS = {
   findings: FindingsBlock,
   gap: GapBlock,
   update: UpdateBlock,
-  sources: SourcesBlock,
 };
 
 function normalise(block) {
@@ -41,7 +39,9 @@ function detailLabels(details) {
 export default function BlockRenderer({ blocks, fallbackText, footer }) {
   const normalised = Array.isArray(blocks) ? blocks.map(normalise) : [];
   const summaries = normalised.filter((block) => block.type === "summary" && block.text);
-  const details = normalised.filter((block) => block.type !== "summary");
+  const details = normalised.filter(
+    (block) => block.type !== "summary" && block.type !== "sources"
+  );
 
   const response = summaries.length
     ? summaries.map((block) => block.text).join("\n\n")

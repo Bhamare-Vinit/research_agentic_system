@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from agent import llm
 from agent.prompts import render_prompt
 from agent.settings import RESEARCH_AGENT_MAX_STEPS
-from agent.tools import dossier_tools, web_tools
+from agent.tools import dossier_tools, mcp_client
 
 TOOL_OUTPUT_LIMIT = 20000
 
@@ -105,7 +105,7 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
                 )
             }
 
-        result = web_tools.web_search(query)
+        result = mcp_client.call_tool("web_search", {"query": query})
         results = result.get("results", [])
         if results:
             record("web_search", f"searched for {query}", result_count=len(results))
@@ -114,7 +114,7 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
         return result
 
     def run_fetch(url):
-        page = web_tools.fetch_page(url)
+        page = mcp_client.call_tool("web_fetch", {"url": url})
         if "error" in page:
             record("fetch_page", f"could not read {url}")
         else:

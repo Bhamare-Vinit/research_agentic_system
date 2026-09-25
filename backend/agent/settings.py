@@ -42,6 +42,7 @@ OPENROUTER_MODEL = read_text("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 OPENROUTER_BASE_URL = read_text("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
 TAVILY_API_KEY = read_text("TAVILY_API_KEY")
+MCP_URL = read_text("MCP_URL", "http://127.0.0.1:8001/mcp")
 
 MODEL_TEMPERATURE = read_text("MODEL_TEMPERATURE", "0")
 SEARCH_DEPTH = read_text("SEARCH_DEPTH", "basic")

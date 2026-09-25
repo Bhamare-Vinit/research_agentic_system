@@ -1,4 +1,3 @@
-import operator
 from typing import Annotated, Optional, TypedDict
 
 from langgraph.graph.message import add_messages
@@ -9,7 +8,7 @@ class DossierState(TypedDict, total=False):
     user_query: str
     agent_messages: list
     retrieved_findings_cache: list[dict]
-    activity: Annotated[list[dict], operator.add]
+    activity: list[dict]
     research_task: Optional[dict]
     research_result: Optional[dict]
     findings_added: int
