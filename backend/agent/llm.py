@@ -78,7 +78,7 @@ def build_chain(temperature, to_runnables):
 
 def get_tool_llm(tools, temperature=Ellipsis):
     chosen = default_temperature() if temperature is Ellipsis else temperature
-    return build_chain(chosen, lambda model: [model.bind_tools(tools)])
+    return build_chain(chosen, lambda model: [model.bind_tools(tools, strict=True)])
 
 
 def message_text(response):

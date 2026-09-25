@@ -9,7 +9,7 @@ from agent.prompts import render_prompt
 from agent.settings import RESEARCH_AGENT_MAX_STEPS
 from agent.tools import dossier_tools, web_tools
 
-TOOL_OUTPUT_LIMIT = 16000
+TOOL_OUTPUT_LIMIT = 20000
 
 
 class SearchInput(BaseModel):
@@ -25,17 +25,24 @@ class FindingItem(BaseModel):
         description="the category this fact belongs to, in snake_case, from the plan or a new one you judge is needed"
     )
     claim: str = Field(
-        description="one self-contained factual sentence carrying the figure, unit and timeframe"
+        description=(
+            "one self-contained sentence stating a single fact with its context: figure, unit and "
+            "timeframe where there are any, who says it, under what conditions. Several figures, "
+            "systems or metrics are several findings"
+        )
     )
     source: str = Field(description="the exact url you read this fact on")
     date: str = Field(
-        default="", description="publication date of the source as YYYY-MM-DD, or empty for today"
+        description="publication date of the source as YYYY-MM-DD, or empty for today"
     )
 
 
 class WriteFindingsInput(BaseModel):
     findings: list[FindingItem] = Field(
-        description="every fact you have gathered, each tagged with its category"
+        description=(
+            "every specific fact from the pages read in this round, each tagged with its category, "
+            "or an empty list if they held nothing usable"
+        )
     )
 
 
@@ -66,14 +73,16 @@ def format_existing(topic):
         return "  (nothing recorded on this topic yet)"
 
     lines = []
-    for category in structure:
+    for category, count in structure.items():
         lines.append(f"  {category}:")
-        for finding in dossier_tools.get_dossier(topic, category)["findings"]:
+        for finding in dossier_tools.get_dossier(topic, category, limit=count)["findings"]:
             lines.append(f"    [{finding['id']}] ({finding.get('date')}) {finding['claim']}")
     return "\n".join(lines)
 
 
 def build_toolkit(topic, preferred, activity, written, created, outcome):
+    unfiled_pages = set()
+
     def record(tool_name, summary, **extra):
         activity.append(
             {
@@ -86,6 +95,16 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
         )
 
     def run_search(query):
+        if unfiled_pages:
+            record("web_search", f"held back {query} until the pages already read are filed")
+            return {
+                "error": (
+                    "file what the pages you have read gave you before searching again. Call "
+                    "write_findings with their facts, or with an empty list if they held nothing "
+                    f"usable. Not yet filed: {', '.join(sorted(unfiled_pages))}"
+                )
+            }
+
         result = web_tools.web_search(query)
         results = result.get("results", [])
         if results:
@@ -99,6 +118,7 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
         if "error" in page:
             record("fetch_page", f"could not read {url}")
         else:
+            unfiled_pages.add(page["url"])
             record("fetch_page", f"read {page['title']}", url=page["url"])
         return page
 
@@ -108,6 +128,7 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
             for finding in findings
         ]
         result = dossier_tools.write_findings(topic, items, preferred_information=preferred)
+        unfiled_pages.clear()
         created.update(result["new_categories"])
 
         for item, outcome_row in zip(items, result["results"]):
@@ -140,7 +161,10 @@ def build_toolkit(topic, preferred, activity, written, created, outcome):
         "web_search": StructuredTool.from_function(
             func=run_search,
             name="web_search",
-            description="Search the live web for a specific query and get back titles, urls and snippets.",
+            description=(
+                "Search the live web for a specific query and get back titles, urls and snippets. "
+                "Refused while pages you have read are not yet filed with write_findings."
+            ),
             args_schema=SearchInput,
         ),
         "fetch_page": StructuredTool.from_function(
@@ -187,6 +211,7 @@ def run_research_agent(state):
         research_question=question,
         plan=format_plan(plan),
         existing=format_existing(topic),
+        step_budget=RESEARCH_AGENT_MAX_STEPS,
     )
 
     model = llm.get_tool_llm(list(toolkit.values()))

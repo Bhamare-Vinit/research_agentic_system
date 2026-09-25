@@ -5,6 +5,11 @@ import BlockRenderer from "./blocks/BlockRenderer.jsx";
 import ProgressBlock from "./blocks/ProgressBlock.jsx";
 
 const THREAD_STORAGE_KEY = "dossier.thread";
+const SUGGESTIONS = [
+  "Research the current state of solid-state batteries, especially cost",
+  "What did we find on hybrid search benchmarks?",
+  "How does the JEV model work?",
+];
 
 function TurnMeta({ answer }) {
   const retrieval = answer.retrieval_stats || {};
@@ -26,7 +31,7 @@ function TurnMeta({ answer }) {
     parts.push(`${answer.dropped_finding_ids.length} invented id dropped`);
   }
 
-  return <div className="turn-meta">{parts.join("  ·  ")}</div>;
+  return <div className="turn-meta">{parts.join(" · ")}</div>;
 }
 
 function rememberedThread() {
@@ -117,69 +122,90 @@ export default function App() {
     setSteps([]);
   }
 
+  function startNewSession() {
+    forgetThread();
+    setThreadId(null);
+    setTurns([]);
+  }
+
   return (
-    <div className="shell">
-      <header className="masthead">
-        <h1>Dossier</h1>
-        <div className="meta">
+    <div className="app">
+      <header className="titlebar">
+        <div className="brand">
+          <div className="logo">D</div>
+          <div>
+            <h1>Dossier</h1>
+            <p>Autonomous research agent</p>
+          </div>
+        </div>
+        <div className="titlebar-actions">
+          <span className={health ? "health online" : "health offline"}>
+            <span className="dot" />
+            {health
+              ? `${health.model}${health.search_configured ? " · tavily" : " · no search"}`
+              : "backend unreachable"}
+          </span>
           {turns.length > 0 && (
-            <button
-              type="button"
-              className="reset"
-              onClick={() => {
-                forgetThread();
-                setThreadId(null);
-                setTurns([]);
-              }}
-            >
-              new session
+            <button type="button" className="ghost" onClick={startNewSession} disabled={running}>
+              New session
             </button>
           )}
-          {" "}
-          {health
-            ? `${health.model} via ${health.provider}${health.search_configured ? " · tavily" : " · no search"}${health.tracing ? ` · tracing ${health.tracing}` : ""}`
-            : "backend unreachable"}
         </div>
       </header>
 
-      {failure && <div className="failure">{failure}</div>}
+      <main className="thread">
+        {failure && <div className="failure">{failure}</div>}
 
-      {turns.length === 0 && !running && (
-        <p className="empty">Ask Dossier to research something.</p>
-      )}
-
-      {turns.map((turn, index) => (
-        <article className="turn" key={index}>
-          <div className="question">
-            <span>you</span>
-            {turn.query}
+        {turns.length === 0 && !running && (
+          <div className="empty">
+            <h2>What should we look into?</h2>
+            <p>Dossier plans its own web research and keeps every finding, with its source, in a case file.</p>
+            <div className="suggestions">
+              {SUGGESTIONS.map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => setDraft(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="answer">
-            {turn.answer ? (
-              <>
-                <BlockRenderer blocks={turn.answer.blocks} />
-                <TurnMeta answer={turn.answer} />
-              </>
-            ) : (
-              <ProgressBlock status={status || "working"} steps={steps} />
-            )}
-          </div>
-        </article>
-      ))}
+        )}
 
-      <div className="composer">
+        {turns.map((turn, index) => (
+          <article className="turn" key={index}>
+            <div className="question">
+              <div className="bubble">{turn.query}</div>
+            </div>
+            <div className="answer">
+              <div className="avatar">D</div>
+              <div className="card">
+                {turn.answer ? (
+                  <BlockRenderer
+                    blocks={turn.answer.blocks}
+                    fallbackText={turn.answer.final_answer}
+                    footer={<TurnMeta answer={turn.answer} />}
+                  />
+                ) : (
+                  <ProgressBlock status={status || "working"} steps={steps} />
+                )}
+              </div>
+            </div>
+          </article>
+        ))}
+      </main>
+
+      <footer className="composer">
         <form onSubmit={ask}>
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Research the current state of solid-state batteries, especially cost"
+            placeholder="Ask a question or start new research"
             disabled={running}
           />
           <button type="submit" disabled={running || !draft.trim()}>
-            {running ? "researching" : "ask"}
+            {running ? "Working" : "Send"}
           </button>
         </form>
-      </div>
+      </footer>
     </div>
   );
 }

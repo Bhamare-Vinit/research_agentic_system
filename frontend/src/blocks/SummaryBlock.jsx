@@ -1,8 +1,14 @@
-export default function SummaryBlock({ block }) {
+export default function SummaryBlock({ text }) {
+  const paragraphs = String(text || "")
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
   return (
-    <section className="block">
-      <h2>Summary</h2>
-      <p>{block.text}</p>
-    </section>
+    <div className="response">
+      {paragraphs.map((paragraph, index) => (
+        <p key={index}>{paragraph}</p>
+      ))}
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import json
+import re
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import StructuredTool
@@ -7,12 +8,14 @@ from typing import Literal
 
 from agent import llm, tokens
 from agent.prompts import render_prompt
-from agent.settings import MAIN_AGENT_MAX_STEPS, MAX_RESEARCH_ITERATIONS
+from agent.settings import MAIN_AGENT_MAX_STEPS, MAX_RESEARCH_ITERATIONS, RETRIEVAL_TOP_K
 from agent.tools import dossier_tools, storage
 
-BLOCK_TYPES = ("summary", "findings", "sources", "gap", "update")
+BLOCK_TYPES = ("summary", "findings", "gap", "update")
 PROSE_BLOCKS = ("summary", "gap")
+BLOCKS_SHOWING_URLS = ("findings", "update")
 HISTORY_TURNS = 8
+TOOL_OUTPUT_LIMIT = 30000
 
 GENERIC_CATEGORIES = dossier_tools.GENERIC_CATEGORIES
 
@@ -24,7 +27,7 @@ class RetrieveInput(BaseModel):
 
 class ResearchPlanItem(BaseModel):
     information: str = Field(
-        description="a snake_case information category, such as architecture, pricing, benchmarks, limitations"
+        description="a snake_case name for the kind of information this entry covers"
     )
     what_to_find: str = Field(
         description="what the Research Agent should establish under this category"
@@ -37,17 +40,17 @@ class ResearchInput(BaseModel):
         description="the overall question the Research Agent should answer from live sources"
     )
     plan: list[ResearchPlanItem] = Field(
-        description="the categories to cover, usually three to six, each with what to find in it"
+        description="the categories this subject calls for, each with what to find in it"
     )
 
 
 class AnswerBlock(BaseModel):
-    type: Literal["summary", "findings", "sources", "gap", "update"] = Field(
+    type: Literal["summary", "findings", "gap", "update"] = Field(
         description="which kind of block this is"
     )
-    text: str = Field(default="", description="prose for summary, gap and update blocks")
+    text: str = Field(description="prose for summary, gap and update blocks, or empty")
     finding_ids: list[str] = Field(
-        default_factory=list, description="ids copied exactly from retrieve, never invented"
+        description="ids copied exactly from retrieve, never invented, or an empty list"
     )
 
 
@@ -74,6 +77,15 @@ def format_history(messages):
     return "\n".join(lines)
 
 
+def strip_finding_ids(text, known_ids):
+    for finding_id in sorted(known_ids, key=len, reverse=True):
+        text = text.replace(finding_id, "")
+    text = re.sub(r"[\[(]\s*(?:[,;]\s*)*[\])]", "", text)
+    text = re.sub(r"(?:\s*[,;])+\s*(?=[.\n]|$)", "", text)
+    text = re.sub(r"[ \t]+([.,;:])", r"\1", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
 def hydrate_blocks(specs, available):
     by_id = {finding["id"]: finding for finding in available}
     by_source = {finding["source"]: finding for finding in available}
@@ -93,7 +105,7 @@ def hydrate_blocks(specs, available):
             elif finding not in resolved:
                 resolved.append(finding)
 
-        text = (block.get("text") or "").strip()
+        text = strip_finding_ids(block.get("text") or "", by_id)
         if not text and not resolved:
             continue
 
@@ -102,23 +114,33 @@ def hydrate_blocks(specs, available):
     return blocks, dropped
 
 
-def fill_source_blocks(blocks):
-    cited = []
-    seen = set()
+def summary_first(blocks, fallback_text):
+    summaries = [block for block in blocks if block["type"] == "summary"]
+    others = [block for block in blocks if block["type"] != "summary"]
+    if not summaries:
+        summaries = [{"type": "summary", "text": fallback_text, "findings": []}]
+    return summaries + others
+
+
+def add_source_block(blocks):
+    shown_urls = {
+        finding["source"]
+        for block in blocks
+        if block["type"] in BLOCKS_SHOWING_URLS
+        for finding in block["findings"]
+    }
+
+    unshown = []
+    seen_urls = set(shown_urls)
     for block in blocks:
         for finding in block["findings"]:
-            if finding["id"] not in seen:
-                seen.add(finding["id"])
-                cited.append(finding)
+            if finding["source"] not in seen_urls:
+                seen_urls.add(finding["source"])
+                unshown.append(finding)
 
-    for block in blocks:
-        if block["type"] != "sources":
-            continue
-        block["text"] = None
-        if not block["findings"]:
-            block["findings"] = list(cited)
-
-    return [block for block in blocks if block["type"] != "sources" or block["findings"]]
+    if unshown:
+        blocks.append({"type": "sources", "text": None, "findings": unshown})
+    return blocks
 
 
 def build_toolkit(seen_findings, activity, outcome, iteration):
@@ -210,7 +232,7 @@ def build_toolkit(seen_findings, activity, outcome, iteration):
         "retrieve": StructuredTool.from_function(
             func=run_retrieve,
             name="retrieve",
-            description="Read the findings stored under one topic and one information category.",
+            description="Read the findings in the one category that answers the question. Retrieve only what the question needs.",
             args_schema=RetrieveInput,
         ),
         "research": StructuredTool.from_function(
@@ -233,6 +255,8 @@ def opening_transcript(state):
         "main_agent",
         history=format_history(state.get("messages", [])[:-1]),
         query=state["user_query"],
+        retrieval_cap=RETRIEVAL_TOP_K,
+        research_limit=MAX_RESEARCH_ITERATIONS,
     )
     return [HumanMessage(prompt)]
 
@@ -287,20 +311,14 @@ def retrieval_stats(available):
 def settle(state, transcript, outcome, activity, seen_findings):
     available = list(seen_findings.values())
     blocks, dropped = hydrate_blocks(outcome.get("blocks") or [], available)
-    blocks = fill_source_blocks(blocks)
-
-    if not blocks:
-        blocks = [
-            {
-                "type": "gap",
-                "text": "The case file does not hold anything that answers this yet.",
-                "findings": [],
-            }
-        ]
 
     answer = " ".join(
         block["text"] for block in blocks if block["type"] in PROSE_BLOCKS and block["text"]
     )
+    blocks = summary_first(
+        blocks, answer or "The case file does not hold anything that answers this yet."
+    )
+    blocks = add_source_block(blocks)
 
     return {
         "agent_messages": transcript,
@@ -344,7 +362,10 @@ def run_main_agent(state):
             else:
                 output = selected.invoke(call["args"])
             transcript.append(
-                ToolMessage(content=json.dumps(output, default=str)[:12000], tool_call_id=call["id"])
+                ToolMessage(
+                    content=json.dumps(output, default=str)[:TOOL_OUTPUT_LIMIT],
+                    tool_call_id=call["id"],
+                )
             )
             if call["name"] == "research" and outcome.get("research_task"):
                 return {
