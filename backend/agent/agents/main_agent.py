@@ -319,6 +319,14 @@ def settle(state, transcript, outcome, activity, seen_findings):
         blocks, answer or "The case file does not hold anything that answers this yet."
     )
     blocks = add_source_block(blocks)
+    stats = retrieval_stats(available)
+
+    turn_record = {
+        "blocks": blocks,
+        "dropped_finding_ids": dropped,
+        "retrieval_stats": stats,
+        "iterations": state.get("iteration", 0),
+    }
 
     return {
         "agent_messages": transcript,
@@ -328,8 +336,10 @@ def settle(state, transcript, outcome, activity, seen_findings):
         "blocks": blocks,
         "dropped_finding_ids": dropped,
         "final_answer": answer,
-        "retrieval_stats": retrieval_stats(available),
-        "messages": [AIMessage(answer or "See the findings below.")],
+        "retrieval_stats": stats,
+        "messages": [
+            AIMessage(answer or "See the findings below.", additional_kwargs={"turn": turn_record})
+        ],
     }
 
 

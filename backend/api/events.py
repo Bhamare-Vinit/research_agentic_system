@@ -27,16 +27,17 @@ def replay_thread(thread_id):
         if speaker == "human":
             turns.append({"query": message.content, "answer": None})
         elif speaker == "ai" and turns:
+            saved = message.additional_kwargs.get("turn", {})
             turns[-1]["answer"] = {
                 "final_answer": message.content,
-                "blocks": [],
-                "dropped_finding_ids": [],
-                "retrieval_stats": {},
-                "iterations": 0,
+                "blocks": saved.get("blocks", []),
+                "dropped_finding_ids": saved.get("dropped_finding_ids", []),
+                "retrieval_stats": saved.get("retrieval_stats", {}),
+                "iterations": saved.get("iterations", 0),
                 "llm": {},
             }
 
-    if turns and turns[-1]["answer"] and values.get("blocks"):
+    if turns and turns[-1]["answer"] and not turns[-1]["answer"]["blocks"] and values.get("blocks"):
         turns[-1]["answer"]["blocks"] = values["blocks"]
         turns[-1]["answer"]["retrieval_stats"] = values.get("retrieval_stats", {})
         turns[-1]["answer"]["iterations"] = values.get("iteration", 0)
