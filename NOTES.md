@@ -42,10 +42,6 @@
 
 ## Not reached
 
-- **Resuming a research run after a page refresh.** The dossier and conversation survive a
-  refresh, and findings filed mid-run are kept, but the interrupted run does not resume.
-- **Details after a refresh.** Only the latest turn keeps its details panel.
-- **`last_verified` in the UI.** It is stored on every finding but not shown.
 - **Researching sub-questions in parallel.**
 - **An explicit `supersedes` link** between old and new findings.
 
@@ -58,7 +54,7 @@
 
 ## AI usage
 
-- I used Claude Code as a pair programmer for scaffolding, prompts, debugging and live test runs.
+- I used Claude Code and github copilot as a pair programmer for scaffolding, prompts, debugging and live test runs.
 - I set the design and reviewed every change before committing it.
 - I corrected its mistakes when they came up, for example over-retrieval and ids leaking into
   replies.
